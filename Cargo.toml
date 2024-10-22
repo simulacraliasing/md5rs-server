@@ -4,15 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "md5rs-server"
-path = "src/server.rs"
-
-[[bin]]
-name = "md5rs-client"
-path = "src/client.rs"
+name = "md5rs-token-generator"
+path = "src/token.rs"
 
 [dependencies]
-tonic = "0.12"
+chrono = { version = "0.4.38", features = ["serde"] }
+clap = { version = "4.5.20", features = ["derive"] }
+tonic = { version = "0.12", features = ["zstd", "tls", "server"] }
 prost = "0.13"
 tokio = { version = "1.0", features = [
     "rt-multi-thread",
@@ -21,9 +19,40 @@ tokio = { version = "1.0", features = [
     "time",
 ] }
 tokio-stream = "0.1"
-crossbeam = "0.8.4"
+crossbeam-channel = "0.5.13"
 async-stream = "0.3.6"
 uuid = { version = "1.11.0", features = ["v4"] }
+image = { version = "0.25.4", default-features = false, features = [
+    "webp",
+    "rayon",
+] }
+anyhow = "1.0.90"
+ndarray = "0.16.1"
+nshare = { version = "0.10.0", default-features = false, features = [
+    "image",
+    "ndarray",
+] }
+tracing = "0.1.40"
+tracing-appender = "0.2.3"
+tracing-error = "0.2.0"
+tracing-subscriber = { version = "0.3.18", features = [
+    "std",
+    "local-time",
+    "env-filter",
+] }
+ort = { version = "=2.0.0-rc.6", features = [
+    "download-binaries",
+    "cuda",
+    "tensorrt",
+] }
+rayon = "1.10.0"
+sqlx = { version = "0.8", features = ["runtime-tokio", "mysql"] }
+rand = "0.8.5"
+base64 = "0.22.1"
+
 
 [build-dependencies]
 tonic-build = "0.12"
+
+[profile.release]
+lto = true
