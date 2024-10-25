@@ -216,19 +216,25 @@ pub fn decode_worker(
     })
 }
 
-pub fn detect_worker(receiver: Arc<Receiver<DetectTask>>) -> thread::JoinHandle<()> {
+pub fn detect_worker(
+    model_path: String,
+    device: i32,
+    receiver: Arc<Receiver<DetectTask>>,
+) -> thread::JoinHandle<()> {
     thread::spawn(move || {
+        let model_path = Path::new(&model_path);
+        let model_folder = model_path.parent().unwrap();
         let ep = ort::TensorRTExecutionProvider::default()
             .with_engine_cache(true)
-            .with_engine_cache_path("./models")
+            .with_engine_cache_path(model_folder.to_string_lossy())
             .with_timing_cache(true)
             .with_fp16(true)
             .with_profile_min_shapes("images:1x3x1280x1280")
             .with_profile_opt_shapes("images:2x3x1280x1280")
             .with_profile_max_shapes("images:5x3x1280x1280")
-            .with_device_id(3)
+            .with_device_id(device)
             .build();
-        let model = load_model(Path::new("models/md_v5a_d_pp_fp16.onnx"), ep).unwrap();
+        let model = load_model(Path::new(&model_path), ep).unwrap();
         info!(
             "Model md_v5a_d_pp_fp16 loaded at {:?}",
             std::thread::current().id()

@@ -2,7 +2,7 @@ use base64::{engine::general_purpose::URL_SAFE, Engine as _};
 use rand::Rng;
 use sqlx::{query, query_as, Error, MySqlPool};
 
-fn generate_bearer_token() -> String {
+pub fn generate_bearer_token() -> String {
     // Generate 32 random bytes
     let random_bytes: [u8; 32] = rand::thread_rng().gen();
 

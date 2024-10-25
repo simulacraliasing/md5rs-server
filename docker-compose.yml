@@ -1,0 +1,22 @@
+version: "3"
+
+services:
+  app:
+    container_name: md5rs-server
+    image: simulacraliasing/md5rs-server:latest
+    restart: unless-stopped
+    ports:
+      - "50051:50051"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['3']
+              capabilities: [gpu]
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_URL: "mysql://shanshui:cat2022%40ShanShui@localhost:33306/cat"
+    volumes:
+      - /home/hinature/ML/md5rs-server/logs:/app/logs
+      - /home/hinature/ML/md5rs-server/models:/app/models

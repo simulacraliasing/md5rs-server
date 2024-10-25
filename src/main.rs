@@ -43,10 +43,11 @@ pub struct DetectTask {
     response_sender: oneshot::Sender<DetectResponse>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Md5rsService {
     sender: Sender<DecodeTask>,
     db: sqlx::MySqlPool,
+    redis: redis::Client,
 }
 
 #[tonic::async_trait]
@@ -58,6 +59,24 @@ impl Md5rs for Md5rsService {
         &self,
         request: Request<tonic::Streaming<DetectRequest>>,
     ) -> Result<Response<Self::DetectStream>, Status> {
+        match request.metadata().get("authorization") {
+            Some(token) => {
+                let token = token.to_str().unwrap();
+                let mut redis_conn = self.redis.get_multiplexed_tokio_connection().await.unwrap();
+                match auth::get_token(&mut redis_conn, token).await {
+                    Ok(Some(_)) => {}
+                    Ok(None) => {
+                        return Err(Status::unauthenticated("Invalid token"));
+                    }
+                    Err(_) => {
+                        return Err(Status::internal("Internal server error"));
+                    }
+                }
+            }
+            None => {
+                return Err(Status::unauthenticated("No token provided"));
+            }
+        }
         let mut stream = request.into_inner();
 
         let sender = self.sender.clone();
@@ -115,13 +134,22 @@ impl Md5rs for Md5rsService {
     }
 
     async fn auth(&self, request: Request<AuthRequest>) -> Result<Response<AuthResponse>, Status> {
-        auth::authenticate(request, &self.db).await
+        let mut redis_conn = self.redis.get_multiplexed_tokio_connection().await.unwrap();
+        auth::authenticate(request, &self.db, &mut redis_conn, 604_800).await
     }
 }
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
+    /// model path
+    #[arg(long, short, default_value = "models/md_v5a_d_pp_fp16.onnx")]
+    model: String,
+
+    /// device
+    #[arg(long, short, default_value = "0")]
+    device: Vec<i32>,
+
     /// Log level
     #[arg(long, value_enum, default_value_t = LogLevel::Info)]
     log_level: LogLevel,
@@ -173,8 +201,8 @@ async fn run(args: Args) -> Result<()> {
     let (detect_q_s, detect_q_r) = bounded::<DetectTask>(8);
 
     let decode_q_r = Arc::new(decode_q_r);
-    let detect_q_s = Arc::new(detect_q_s);
 
+    let detect_q_s = Arc::new(detect_q_s);
     let detect_q_r = Arc::new(detect_q_r);
 
     // Create worker threads
@@ -188,20 +216,29 @@ async fn run(args: Args) -> Result<()> {
         // detect::detect_worker(receiver);
     }
 
-    for _ in 0..detect_workers {
-        let r = Arc::clone(&detect_q_r);
-        detect::detect_worker(r);
+    for d in args.device {
+        for _ in 0..detect_workers {
+            let model = args.model.clone();
+            let r = Arc::clone(&detect_q_r);
+            detect::detect_worker(model, d, r);
+        }
     }
+
+    let sql_url = std::env::var("MYSQL_URL").expect("MYSQL_URL env var is not set");
+
+    let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL env var is not set");
 
     // Start the gRPC server
     let addr = args.host.parse()?;
 
-    let db_pool =
-        sqlx::MySqlPool::connect("mysql://shanshui:cat2022%40ShanShui@localhost:33306/cat").await?;
+    let db_pool = sqlx::MySqlPool::connect(&sql_url).await?;
+
+    let redis_client = redis::Client::open(redis_url)?;
 
     let svc = Md5rsServer::new(Md5rsService {
         sender: decode_q_s,
         db: db_pool,
+        redis: redis_client,
     });
 
     info!("Server started at {}", args.host);

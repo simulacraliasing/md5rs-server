@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
+name = "md5rs-server"
+path = "src/main.rs"
+
+[[bin]]
 name = "md5rs-token-generator"
 path = "src/token.rs"
 
@@ -49,6 +53,7 @@ rayon = "1.10.0"
 sqlx = { version = "0.8", features = ["runtime-tokio", "mysql"] }
 rand = "0.8.5"
 base64 = "0.22.1"
+redis = {version = "0.27", features = ["tokio-comp"]}
 
 
 [build-dependencies]
@@ -56,3 +61,5 @@ tonic-build = "0.12"
 
 [profile.release]
 lto = true
+strip = true
+codegen-units = 1

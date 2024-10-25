@@ -1,0 +1,4 @@
+*.code-workspace
+/test-data
+/logs
+/target
