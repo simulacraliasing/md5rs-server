@@ -5,7 +5,7 @@ use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use crossbeam_channel::{bounded, unbounded, Sender};
 use ndarray::Array4;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, Mutex};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tonic::{transport::Server, Request, Response, Status};
 use tracing::{error, info};
@@ -59,12 +59,22 @@ impl Md5rs for Md5rsService {
         &self,
         request: Request<tonic::Streaming<DetectRequest>>,
     ) -> Result<Response<Self::DetectStream>, Status> {
+        let username;
+
+        let quota_sync_count = Arc::new(Mutex::new(0));
+
+        let mut redis_conn = self.redis.get_multiplexed_tokio_connection().await.unwrap();
+
+        let db_pool = self.db.clone();
+
         match request.metadata().get("authorization") {
             Some(token) => {
                 let token = token.to_str().unwrap();
-                let mut redis_conn = self.redis.get_multiplexed_tokio_connection().await.unwrap();
+                // let mut redis_conn = self.redis.get_multiplexed_tokio_connection().await.unwrap();
                 match auth::get_token(&mut redis_conn, token).await {
-                    Ok(Some(_)) => {}
+                    Ok(Some(username_)) => {
+                        username = username_;
+                    }
                     Ok(None) => {
                         return Err(Status::unauthenticated("Invalid token"));
                     }
@@ -87,6 +97,30 @@ impl Md5rs for Md5rsService {
             while let Some(req) = stream.next().await {
                 match req {
                     Ok(detect_request) => {
+                        // consume quota
+                        let mut user = auth::get_quota(&mut redis_conn, &username)
+                            .await
+                            .unwrap()
+                            .unwrap();
+
+                        let remaining_quota = user.remaining_quota();
+
+                        if remaining_quota == 0 {
+                            auth::update_quota(&db_pool, &user).await.unwrap();
+                            let _ = response_tx
+                                .send(Err(Status::resource_exhausted("Quota exhausted")))
+                                .await;
+                            break;
+                        } else if remaining_quota > 0 {
+                            user.quota_used += 1;
+                            auth::set_quota(&mut redis_conn, &user).await.unwrap();
+                            let mut lock = quota_sync_count.lock().await;
+                            *lock += 1;
+                            if *lock % 100 == 0 {
+                                auth::update_quota(&db_pool, &user).await.unwrap();
+                            }
+                        }
+
                         let (task_response_sender, task_response_receiver) = oneshot::channel();
 
                         let uuid = detect_request.uuid.clone();

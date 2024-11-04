@@ -186,6 +186,8 @@ fn process_frame(
 
     let labels = get_label(&bboxs, class_map);
 
+    
+
     Ok(DetectResponse {
         uuid,
         bboxs,

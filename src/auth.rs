@@ -8,6 +8,31 @@ use tracing::{error, info};
 
 use crate::{AuthRequest, AuthResponse};
 
+#[derive(Debug)]
+pub struct User {
+    pub username: String,
+    pub quota: i32,
+    pub quota_used: i32,
+}
+
+impl User {
+    pub fn new(username: String, quota: i32, quota_used: i32) -> Self {
+        User {
+            username,
+            quota,
+            quota_used,
+        }
+    }
+
+    pub fn remaining_quota(&self) -> i32 {
+        if self.quota < 0 {
+            -1
+        } else {
+            self.quota - self.quota_used
+        }
+    }
+}
+
 pub async fn authenticate(
     req: Request<AuthRequest>,
     db_pool: &MySqlPool,
@@ -17,11 +42,19 @@ pub async fn authenticate(
     let token = req.into_inner().token;
 
     match get_user_from_db(db_pool, &token).await {
-        Ok(Some(uuid)) => {
-            let session_token = set_token(redis_client, &uuid, expire).await.map_err(|e| {
-                error!("Error setting token in Redis: {:?}", e);
+        Ok(Some(user)) => {
+            let session_token = set_token(redis_client, &user.username, expire)
+                .await
+                .map_err(|e| {
+                    error!("Error setting token in Redis: {:?}", e);
+                    Status::internal("Internal server error")
+                })?;
+
+            set_quota(redis_client, &user).await.map_err(|e| {
+                error!("Error setting quota in Redis: {:?}", e);
                 Status::internal("Internal server error")
             })?;
+
             Ok(Response::new(AuthResponse {
                 success: true,
                 token: session_token,
@@ -35,16 +68,19 @@ pub async fn authenticate(
     }
 }
 
-async fn get_user_from_db(db_pool: &MySqlPool, token: &str) -> Result<Option<String>> {
+async fn get_user_from_db(db_pool: &MySqlPool, token: &str) -> Result<Option<User>> {
     info!("Querying database for token: {}", token);
 
-    let row: sqlx::Result<(String,)> = sqlx::query_as("SELECT username FROM user WHERE token = ?")
-        .bind(token)
-        .fetch_one(db_pool)
-        .await;
+    let row: sqlx::Result<(String, i32, i32)> =
+        sqlx::query_as("SELECT username, COALESCE(dayLimitNo, -1), COALESCE(dayUploadedNo, -1) FROM user WHERE token = ?")
+            .bind(token)
+            .fetch_one(db_pool)
+            .await;
 
     match row {
-        Ok((uuid,)) => Ok(Some(uuid)),
+        Ok((username, quota, quota_used)) => {
+            Ok(Some(User::new(username, quota * 5, quota_used * 5)))
+        }
         Err(sqlx::Error::RowNotFound) => Ok(None),
         Err(e) => {
             error!("Error querying database: {:?}", e);
@@ -80,4 +116,35 @@ pub async fn get_token(
 ) -> Result<Option<String>> {
     let result: Option<String> = redis::cmd("GET").arg(token).query_async(client).await?;
     Ok(result)
+}
+
+pub async fn set_quota(
+    client: &mut redis::aio::MultiplexedConnection,
+    user: &User,
+) -> redis::RedisResult<()> {
+    let items = vec![("quota", user.quota), ("quota_used", user.quota_used)];
+    let _: () = client.hset_multiple(user.username.clone(), &items).await?;
+    let _: () = client.expire(user.username.clone(), 86400).await?;
+    Ok(())
+}
+
+pub async fn get_quota(
+    client: &mut redis::aio::MultiplexedConnection,
+    username: &str,
+) -> Result<Option<User>> {
+    let result: Option<(i32, i32)> = client.hget(username, &["quota", "quota_used"]).await?;
+    if let Some((quota, quota_used)) = result {
+        Ok(Some(User::new(username.to_string(), quota, quota_used)))
+    } else {
+        Ok(None)
+    }
+}
+
+pub async fn update_quota(db_pool: &MySqlPool, user: &User) -> Result<()> {
+    let _ = sqlx::query("UPDATE user SET dayUploadedNo = ? WHERE username = ?")
+        .bind(user.quota_used / 5)
+        .bind(user.username.clone())
+        .execute(db_pool)
+        .await?;
+    Ok(())
 }

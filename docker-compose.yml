@@ -12,11 +12,33 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['3']
+              device_ids: ['0'] # specify the GPU device ID to use
               capabilities: [gpu]
     environment:
       TZ: Asia/Shanghai
-      MYSQL_URL: "mysql://shanshui:cat2022%40ShanShui@localhost:33306/cat"
+      MYSQL_URL: "mysql://<user>:<password>@db:3306/<database>"
+      REDIS_URL: "redis://cache:6379"
     volumes:
-      - /home/hinature/ML/md5rs-server/logs:/app/logs
-      - /home/hinature/ML/md5rs-server/models:/app/models
+      - <log path>:/app/logs
+      - <model path>:/app/models
+  
+  db:
+    container_name: md5rs-mysql
+    image: mysql:8.0
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: <password>
+      MYSQL_DATABASE: <database>
+      MYSQL_USER: <user>
+      MYSQL_PASSWORD: <password>
+    volumes:
+      - <mysql path>:/var/lib/mysql
+    
+  cache:
+    container_name: md5rs-cache
+    image: redis:alpine
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    volumes:
+      - <redis path>:/data
