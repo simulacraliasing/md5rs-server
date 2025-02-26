@@ -91,7 +91,7 @@ async fn get_user_from_db(db_pool: &MySqlPool, token: &str) -> Result<Option<Use
 
 pub fn generate_bearer_token() -> String {
     // Generate 32 random bytes
-    let random_bytes: [u8; 32] = rand::thread_rng().gen();
+    let random_bytes: [u8; 32] = rand::rng().random();
 
     // Encode the bytes to a Base64 string
     let token = URL_SAFE.encode(&random_bytes);

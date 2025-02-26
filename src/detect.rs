@@ -9,7 +9,9 @@ use crossbeam_channel::{Receiver, Sender};
 use image::ImageReader;
 use ndarray::{s, Array3, Array4, Axis, Dim};
 use nshare::AsNdarray3Mut;
-use ort::{inputs, ExecutionProviderDispatch, Session, SessionOutputs};
+use ort::execution_providers::ExecutionProviderDispatch;
+use ort::inputs;
+use ort::session::{Session, SessionOutputs};
 use tracing::info;
 
 use crate::{Bbox, DecodeTask, DetectResponse, DetectTask};
@@ -186,8 +188,6 @@ fn process_frame(
 
     let labels = get_label(&bboxs, class_map);
 
-    
-
     Ok(DetectResponse {
         uuid,
         bboxs,
@@ -226,7 +226,7 @@ pub fn detect_worker(
     thread::spawn(move || {
         let model_path = Path::new(&model_path);
         let model_folder = model_path.parent().unwrap();
-        let ep = ort::TensorRTExecutionProvider::default()
+        let ep = ort::execution_providers::TensorRTExecutionProvider::default()
             .with_engine_cache(true)
             .with_engine_cache_path(model_folder.to_string_lossy())
             .with_timing_cache(true)
@@ -238,7 +238,8 @@ pub fn detect_worker(
             .build();
         let model = load_model(Path::new(&model_path), ep).unwrap();
         info!(
-            "Model md_v5a_d_pp_fp16 loaded at {:?}",
+            "Model {} loaded at {:?}",
+            model_path.file_stem().unwrap().to_str().unwrap(),
             std::thread::current().id()
         );
         let class_map = [

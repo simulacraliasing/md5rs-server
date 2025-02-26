@@ -18,6 +18,7 @@ services:
       TZ: Asia/Shanghai
       MYSQL_URL: "mysql://<user>:<password>@db:3306/<database>"
       REDIS_URL: "redis://cache:6379"
+      MD_MODEL: "models/MDV6-yolov9e-1280_d_pp.onnx"
     volumes:
       - <log path>:/app/logs
       - <model path>:/app/models

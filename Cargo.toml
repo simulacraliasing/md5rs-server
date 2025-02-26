@@ -44,16 +44,16 @@ tracing-subscriber = { version = "0.3.18", features = [
     "local-time",
     "env-filter",
 ] }
-ort = { version = "=2.0.0-rc.6", features = [
+ort = { version = "=2.0.0-rc.9", features = [
     "download-binaries",
     "cuda",
     "tensorrt",
 ] }
 rayon = "1.10.0"
 sqlx = { version = "0.8", features = ["runtime-tokio", "mysql"] }
-rand = "0.8.5"
+rand = "0.9.0"
 base64 = "0.22.1"
-redis = {version = "0.27", features = ["tokio-comp"]}
+redis = {version = "0.29.0", features = ["tokio-comp"]}
 
 
 [build-dependencies]
