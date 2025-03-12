@@ -11,7 +11,9 @@ use tonic::{transport::Server, Request, Response, Status};
 use tracing::{error, info};
 
 use md5rs::md5rs_server::{Md5rs, Md5rsServer};
-use md5rs::{AuthRequest, AuthResponse, Bbox, DetectRequest, DetectResponse};
+use md5rs::{
+    AuthRequest, AuthResponse, Bbox, DetectRequest, DetectResponse, HealthRequest, HealthResponse
+};
 
 pub mod md5rs {
     tonic::include_proto!("md5rs");
@@ -170,6 +172,13 @@ impl Md5rs for Md5rsService {
     async fn auth(&self, request: Request<AuthRequest>) -> Result<Response<AuthResponse>, Status> {
         let mut redis_conn = self.redis.get_multiplexed_tokio_connection().await.unwrap();
         auth::authenticate(request, &self.db, &mut redis_conn, 604_800).await
+    }
+
+    async fn health(
+        &self,
+        _request: Request<HealthRequest>,
+    ) -> Result<Response<HealthResponse>, Status> {
+        Ok(Response::new(HealthResponse { status: true }))
     }
 }
 

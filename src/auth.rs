@@ -58,11 +58,13 @@ pub async fn authenticate(
             Ok(Response::new(AuthResponse {
                 success: true,
                 token: session_token,
+                quota: user.quota - user.quota_used,
             }))
         }
         Ok(None) => Ok(Response::new(AuthResponse {
             success: false,
             token: "".to_string(),
+            quota: 0,
         })),
         Err(_) => Err(Status::internal("Internal server error")),
     }

@@ -5,7 +5,10 @@ package md5rs;
 service Md5rs {
     rpc Detect(stream DetectRequest) returns (stream DetectResponse);
     rpc Auth(AuthRequest) returns (AuthResponse);
+    rpc Health(HealthRequest) returns (HealthResponse);
 }
+
+message HealthRequest {}
 
 message AuthRequest {
     string token = 1;
@@ -14,6 +17,11 @@ message AuthRequest {
 message AuthResponse {
     bool success = 1;
     string token = 2;
+    int32 quota = 3;
+}
+
+message HealthResponse {
+    bool status = 1;
 }
 
 message DetectRequest {
