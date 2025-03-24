@@ -31,12 +31,14 @@ message DetectRequest {
     int32 height = 4;
     float iou = 5;
     float score = 6;
+    bool iframe = 7;
 }
 
 message DetectResponse {
     string uuid = 1;
     repeated string label = 2;
     repeated Bbox bboxs = 3;
+    bool iframe = 4;
 }
 
 message Bbox {

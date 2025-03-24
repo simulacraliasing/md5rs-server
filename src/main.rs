@@ -30,6 +30,7 @@ struct DecodeTask {
     height: i32,
     iou: f32,
     score: f32,
+    iframe: bool,
     response_sender: oneshot::Sender<DetectResponse>,
 }
 
@@ -42,6 +43,7 @@ pub struct DetectTask {
     pad: i32, // minus is pad height
     iou: f32,
     score: f32,
+    iframe: bool,
     response_sender: oneshot::Sender<DetectResponse>,
 }
 
@@ -131,6 +133,7 @@ impl Md5rs for Md5rsService {
                         let score = detect_request.score;
                         let width = detect_request.width;
                         let height = detect_request.height;
+                        let iframe = detect_request.iframe;
 
                         let task = DecodeTask {
                             uuid,
@@ -139,6 +142,7 @@ impl Md5rs for Md5rsService {
                             height,
                             iou,
                             score,
+                            iframe,
                             response_sender: task_response_sender,
                         };
 

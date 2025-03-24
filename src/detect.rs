@@ -136,6 +136,7 @@ fn process_frame(
     height: i32,
     iou: f32,
     score: f32,
+    iframe: bool,
     class_map: &HashMap<usize, String>,
     model: &Session,
 ) -> Result<DetectResponse> {
@@ -163,15 +164,15 @@ fn process_frame(
         let y2: f32;
 
         if pad >= 0 {
-            x1 = (row[0] / ratio) - pad as f32;
+            x1 = (row[0] - pad as f32) / ratio;
             y1 = (row[1] / ratio) as f32;
-            x2 = (row[2] / ratio) - pad as f32;
+            x2 = (row[2] - pad as f32) / ratio;
             y2 = (row[3] / ratio) as f32;
         } else {
             x1 = (row[0] / ratio) as f32;
-            y1 = (row[1] / ratio) + pad as f32;
+            y1 = (row[1] + pad as f32) / ratio;
             x2 = (row[2] / ratio) as f32;
-            y2 = (row[3] / ratio) + pad as f32;
+            y2 = (row[3] + pad as f32) / ratio;
         }
         let bbox = Bbox {
             x1: x1.max(0.0),
@@ -192,6 +193,7 @@ fn process_frame(
         uuid,
         bboxs,
         label: labels,
+        iframe,
     })
 }
 
@@ -212,6 +214,7 @@ pub fn decode_worker(
                 height: task.height,
                 iou: task.iou,
                 score: task.score,
+                iframe: task.iframe,
                 response_sender: task.response_sender,
             });
         }
@@ -260,6 +263,7 @@ pub fn detect_worker(
                 task.height,
                 task.iou,
                 task.score,
+                task.iframe,
                 &class_map,
                 &model,
             )
