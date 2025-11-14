@@ -3,16 +3,16 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
-use crossbeam_channel::{bounded, unbounded, Sender};
+use crossbeam_channel::{bounded, Sender};
 use ndarray::Array4;
 use tokio::sync::{oneshot, Mutex};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tonic::{transport::Server, Request, Response, Status};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use md5rs::md5rs_server::{Md5rs, Md5rsServer};
 use md5rs::{
-    AuthRequest, AuthResponse, Bbox, DetectRequest, DetectResponse, HealthRequest, HealthResponse
+    AuthRequest, AuthResponse, Bbox, DetectRequest, DetectResponse, HealthRequest, HealthResponse,
 };
 
 pub mod md5rs {
@@ -146,15 +146,28 @@ impl Md5rs for Md5rsService {
                             response_sender: task_response_sender,
                         };
 
-                        if sender.send(task).is_err() {
-                            error!("Failed to send inference task");
-                            continue;
+                        let sender_clone = sender.clone();
+
+                        if let Err(e) =
+                            tokio::task::spawn_blocking(move || sender_clone.send(task)).await
+                        {
+                            error!("Failed to queue decode task: {:?}", e);
+                            break;
                         }
 
-                        let response_tx = response_tx.clone();
+                        let response_tx_clone = response_tx.clone();
                         tokio::spawn(async move {
-                            if let Ok(response) = task_response_receiver.await {
-                                let _ = response_tx.send(Ok(response)).await;
+                            match task_response_receiver.await {
+                                Ok(response) => {
+                                    if response_tx_clone.send(Ok(response)).await.is_err() {
+                                        // Downstream receiver has been dropped, client disconnected.
+                                        debug!("Client disconnected, cannot send response.");
+                                    }
+                                }
+                                Err(_) => {
+                                    // The oneshot sender was dropped, likely because the worker thread panicked.
+                                    error!("Decode/Detect worker may have panicked. Task dropped.");
+                                }
                             }
                         });
                     }
@@ -182,6 +195,7 @@ impl Md5rs for Md5rsService {
         &self,
         _request: Request<HealthRequest>,
     ) -> Result<Response<HealthResponse>, Status> {
+        debug!("Health check");
         Ok(Response::new(HealthResponse { status: true }))
     }
 }
@@ -243,7 +257,7 @@ impl LogLevel {
 
 #[tokio::main]
 async fn run(args: Args) -> Result<()> {
-    let (decode_q_s, decode_q_r) = unbounded::<DecodeTask>();
+    let (decode_q_s, decode_q_r) = bounded::<DecodeTask>(args.decode_workers * 2);
 
     let (detect_q_s, detect_q_r) = bounded::<DetectTask>(8);
 

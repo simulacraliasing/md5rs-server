@@ -4,7 +4,7 @@ use rand::Rng;
 use redis::AsyncCommands;
 use sqlx::MySqlPool;
 use tonic::{Request, Response, Status};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::{AuthRequest, AuthResponse};
 
@@ -54,18 +54,21 @@ pub async fn authenticate(
                 error!("Error setting quota in Redis: {:?}", e);
                 Status::internal("Internal server error")
             })?;
-
+            debug!("Authenticated user: {}", user.username);
             Ok(Response::new(AuthResponse {
                 success: true,
                 token: session_token,
                 quota: user.quota - user.quota_used,
             }))
         }
-        Ok(None) => Ok(Response::new(AuthResponse {
-            success: false,
-            token: "".to_string(),
-            quota: 0,
-        })),
+        Ok(None) => {
+            debug!("User not found");
+            Ok(Response::new(AuthResponse {
+                success: false,
+                token: "".to_string(),
+                quota: 0,
+            }))
+        }
         Err(_) => Err(Status::internal("Internal server error")),
     }
 }

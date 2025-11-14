@@ -12,7 +12,7 @@ pub fn init_logger(
     log_file: String,
 ) -> anyhow::Result<non_blocking::WorkerGuard> {
     let filter = EnvFilter::from_default_env()
-        .add_directive(format!("md5rs_server={}", log_level.to_string()).parse()?);
+        .add_directive(format!("{}", log_level.to_string()).parse()?);
 
     let formatting_layer = fmt::layer()
         .pretty()
